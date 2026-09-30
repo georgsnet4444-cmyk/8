@@ -1,0 +1,46 @@
+name: Build Windows VST3
+
+# Облачная сборка: Visual Studio на вашем ПК не нужен.
+# GitHub -> Actions -> "Build Windows VST3" -> Run workflow, затем скачайте артефакт.
+# Чтобы получить готовый релиз со ссылкой для скачивания: git tag v0.1.0 && git push --tags
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build VST3 (Release)
+        run: cmake --build build --config Release --target NorthstarMastering_VST3 --parallel
+
+      - name: Verify and stage bundle
+        shell: pwsh
+        run: |
+          $bundle = "build/NorthstarMastering_artefacts/Release/VST3/Northstar Master.vst3"
+          $dll = Join-Path $bundle "Contents/x86_64-win/Northstar Master.vst3"
+          if (-not (Test-Path $dll)) { throw "Plug-in binary not found: $dll" }
+          New-Item -ItemType Directory -Force stage | Out-Null
+          Copy-Item -Recurse $bundle stage/
+          Compress-Archive -Path "stage/Northstar Master.vst3" -DestinationPath "Northstar-Master-VST3-Windows-x64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Northstar-Master-VST3-Windows-x64
+          path: stage
+
+      - name: Publish release (only for v* tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Northstar-Master-VST3-Windows-x64.zip
